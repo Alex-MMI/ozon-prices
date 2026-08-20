@@ -258,7 +258,7 @@ def check_prices(data: dict) -> bool:
             print()  # новая строка
 
         p["last_price"] = new_price
-                p["checked_at"] = datetime.utcnow().isoformat()
+        p["checked_at"] = datetime.utcnow().isoformat()
         if "history" not in p:
             p["history"] = []
         p["history"].append({"price": new_price, "at": datetime.utcnow().isoformat()})
