@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Озон — мониторинг цен</title>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  :root{--bg:#0f0f13;--surface:#1a1a24;--surface2:#22222f;--border:#2e2e40;--accent:#005bff;--green:#22c55e;--red:#ef4444;--text:#e8e8f0;--muted:#8888aa;--r:12px}
+  body{background:var(--bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh}
+  nav{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:56px}
+  .brand{font-size:18px;font-weight:700}.brand span{color:var(--accent)}
+  .updated{font-size:12px;color:var(--muted)}
+  .container{max-width:960px;margin:0 auto;padding:32px 16px}
+  .title{font-size:24px;font-weight:700;margin-bottom:6px}
+  .sub{color:var(--muted);font-size:14px;margin-bottom:28px}
+  .grid{display:flex;flex-direction:column;gap:14px}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--r);padding:18px 20px;display:flex;align-items:flex-start;gap:16px;transition:border-color .15s}
+  .card:hover{border-color:#44445a}
+  .img{width:80px;height:80px;object-fit:cover;border-radius:8px;background:var(--surface2);flex-shrink:0;font-size:32px;display:flex;align-items:center;justify-content:center}
+  .info{flex:1;min-width:0}
+  .name{font-weight:600;font-size:15px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .link{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block;margin-bottom:8px}
+  .history{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+  .hist-item{background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:4px 8px;font-size:12px;color:var(--muted)}
+  .hist-item b{color:var(--text)}
+  .price-block{text-align:right;flex-shrink:0}
+  .price{font-size:26px;font-weight:700}
+  .price-label{font-size:11px;color:var(--muted);margin-top:2px}
+  .badge{display:inline-flex;align-items:center;gap:3px;font-size:12px;font-weight:600;padding:3px 8px;border-radius:20px;margin-top:6px}
+  .badge-down{background:#14281e;color:var(--green)}
+  .badge-up{background:#2a1010;color:var(--red)}
+  .empty{text-align:center;padding:80px 20px;color:var(--muted)}
+  .empty-icon{font-size:48px;margin-bottom:12px}
+  .spinner{display:flex;align-items:center;justify-content:center;height:200px;color:var(--muted)}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .spin{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .8s linear infinite;margin-right:12px}
+</style>
+</head>
+<body>
+<nav>
+  <div class="brand">🛒 Озон <span>монитор</span></div>
+  <div class="updated" id="upd">Загрузка...</div>
+</nav>
+<div class="container">
+  <div class="title">Отслеживаемые товары</div>
+  <div class="sub">Добавляй товары через Telegram-бота · цены обновляются каждый час</div>
+  <div class="grid" id="grid">
+    <div class="spinner"><div class="spin"></div>Загрузка данных...</div>
+  </div>
+</div>
+<script>
+const GITHUB_USER = "Alex-MMI";
+const GITHUB_REPO = "ozon-prices";
+const RAW = `https://raw.githubusercontent.com/${GITHUB_USER}/${GITHUB_REPO}/main/products.json`;
+
+function fmt(p){return p==null?"—":Math.round(p).toLocaleString("ru-RU")+" ₽"}
+function timeSince(iso){
+  if(!iso)return"";
+  const m=Math.round((Date.now()-new Date(iso+"Z"))/60000);
+  if(m<1)return"только что";if(m<60)return m+" мин назад";
+  const h=Math.round(m/60);if(h<24)return h+" ч назад";
+  return Math.round(h/24)+" дн назад";
+}
+
+async function load(){
+  try{
+    const r=await fetch(RAW+"?_="+Date.now());
+    if(!r.ok)throw new Error(r.status);
+    render(await r.json());
+  }catch(e){
+    document.getElementById("grid").innerHTML=`<div class="empty"><div class="empty-icon">⚠️</div><p>Ошибка загрузки: ${e}</p></div>`;
+  }
+}
+
+function render(data){
+  const prods=data.products||{};
+  const keys=Object.keys(prods);
+  document.getElementById("upd").textContent="Обновлено: "+new Date().toLocaleTimeString("ru-RU");
+  if(!keys.length){
+    document.getElementById("grid").innerHTML=`<div class="empty"><div class="empty-icon">🔍</div><p>Нет товаров. Отправь ссылку на товар Озона боту в Telegram!</p></div>`;
+    return;
+  }
+  document.getElementById("grid").innerHTML=keys.map(url=>{
+    const p=prods[url],price=p.last_price,hist=(p.history||[]);
+    const prev=hist.length>=2?hist[hist.length-2]:null;
+    let badge="";
+    if(price!=null&&prev!=null){
+      const diff=price-prev.price;
+      if(Math.abs(diff)>0.5){
+        const pct=Math.abs(diff/prev.price*100).toFixed(1);
+        badge=diff<0
+          ?`<div class="badge badge-down">📉 −${fmt(Math.abs(diff))} (${pct}%)</div>`
+          :`<div class="badge badge-up">📈 +${fmt(diff)} (${pct}%)</div>`;
+      }
+    }
+    const histHtml=hist.slice(-5).reverse().map(h=>`<div class="hist-item"><b>${fmt(h.price)}</b> · ${timeSince(h.at)}</div>`).join("");
+    const imgEl=p.image?`<img class="img" src="${p.image}" onerror="this.outerHTML='<div class=\\'img\\'>📦</div>'">`:`<div class="img">📦</div>`;
+    return `<div class="card">${imgEl}<div class="info"><div class="name">${p.name||"Товар"}</div><a class="link" href="${url}" target="_blank">${url.replace("https://www.ozon.ru","ozon.ru").substring(0,65)}…</a>${hist.length?`<div class="history">${histHtml}</div>`:""}</div><div class="price-block"><div class="price">${fmt(price)}</div><div class="price-label">${p.checked_at?timeSince(p.checked_at):"не проверялось"}</div>${badge}</div></div>`;
+  }).join("");
+}
+
+load();
+setInterval(load,300000);
+</script>
+</body>
+</html>
